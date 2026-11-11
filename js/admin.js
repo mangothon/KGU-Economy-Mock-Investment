@@ -1,5 +1,5 @@
 import { configured, app as fbApp, db, doc, getDocs, setDoc, updateDoc, onSnapshot, collection, writeBatch } from './firebase.js';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { COMPANIES, SEED, TOTAL_ROUNDS, DEFAULT_MINUTES, MASK_NAMES } from './config.js';
 import { fmt, esc, mmss, totalPct, applyChanges, settleOrder, totalOf, assignRanks, maskName } from './engine.js';
 
@@ -20,6 +20,7 @@ let selRound = 0;
 let busy = false;
 let minutes = DEFAULT_MINUTES;
 let unsubs = [];
+let kickId = '';
 
 const stateRef = () => doc(db, 'game', 'state');
 const scenarioRef = () => doc(db, 'admin', 'scenario');
@@ -63,8 +64,24 @@ if (!configured) {
       flash('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.');
     }
   });
+  $('googleBtn').addEventListener('click', async () => {
+    flash('');
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (err) {
+      console.error(err);
+      if (err && err.code === 'auth/unauthorized-domain') {
+        flash('Firebase 콘솔 Authentication > 설정 > 승인된 도메인에 이 사이트 주소(아이디.github.io)를 추가해 주세요.');
+      } else if (err && err.code === 'auth/popup-blocked') {
+        flash('브라우저가 로그인 팝업을 막았습니다. 주소창의 팝업 차단을 해제하고 다시 눌러 주세요.');
+      } else if (!err || err.code !== 'auth/popup-closed-by-user') {
+        flash('Google 로그인에 실패했습니다. 다시 시도해 주세요.');
+      }
+    }
+  });
   $('resetBtn').addEventListener('click', resetGame);
   $('csvBtn').addEventListener('click', downloadCsv);
+  $('players').addEventListener('click', onPlayersClick);
   $('control').addEventListener('click', onControlClick);
   $('control').addEventListener('input', (e) => {
     if (e.target.id === 'minutes') minutes = Math.max(1, Math.min(30, parseInt(e.target.value, 10) || DEFAULT_MINUTES));
@@ -384,7 +401,7 @@ async function onScenarioFile(e) {
 function liveList() {
   const prices = state && state.history ? state.history[state.history.length - 1] : initPrices();
   return assignRanks(players.map((p) => ({
-    name: p.name, cash: p.cash, total: totalOf(p.cash, p.holdings || {}, prices),
+    id: p.id, name: p.name, cash: p.cash, total: totalOf(p.cash, p.holdings || {}, prices),
     submitted: !!(state && p.order && p.order.round === state.round)
   })));
 }
@@ -397,11 +414,37 @@ function renderPlayers() {
     rows += '<tr><td>' + p.rank + '</td><td style="font-weight:600">' + esc(p.name) + '</td>' +
       '<td>' + (p.submitted ? '<span class="ok">제출</span>' : '<span class="sub">미제출</span>') + '</td>' +
       '<td class="r">' + fmt(p.cash) + '</td><td class="r">' + fmt(p.total) + '</td>' +
-      '<td class="r ' + (ret >= 0 ? 'up' : 'down') + '">' + (ret >= 0 ? '+' : '−') + Math.abs(ret).toFixed(2) + '%</td></tr>';
+      '<td class="r ' + (ret >= 0 ? 'up' : 'down') + '">' + (ret >= 0 ? '+' : '−') + Math.abs(ret).toFixed(2) + '%</td>' +
+      '<td class="r">' + (kickId === p.id
+        ? '<button class="btn" type="button" data-kick="' + esc(p.id) + '" style="height:40px;font-size:14px;background:var(--up);color:#fff">정말 내보내기</button> ' +
+          '<button class="btn ghost" type="button" data-kick-cancel="1" style="height:40px;font-size:14px">취소</button>'
+        : '<button class="btn ghost" type="button" data-kick-ask="' + esc(p.id) + '" style="height:40px;font-size:14px" aria-label="' + esc(p.name) + ' 내보내기">내보내기</button>') +
+      '</td></tr>';
   }
-  $('players').innerHTML = '<h2>참가자 ' + players.length + '명</h2><div class="scroll"><table class="tbl" style="min-width:560px"><thead><tr>' +
-    '<th>순위</th><th>이름</th><th>이번 라운드</th><th class="r">현금</th><th class="r">총자산</th><th class="r">수익률</th></tr></thead><tbody>' +
-    (rows || '<tr><td colspan="6" class="sub">아직 입장한 참가자가 없습니다.</td></tr>') + '</tbody></table></div>';
+  $('players').innerHTML = '<h2>참가자 ' + players.length + '명</h2>' +
+    '<p class="sub" style="font-size:13px;line-height:1.6">내보내면 그 참가자의 기록이 지워지고 휴대폰은 입장 화면으로 돌아갑니다. 스크린 순위표에는 다음 결과 공개 때 반영됩니다.</p>' +
+    '<div class="scroll"><table class="tbl" style="min-width:680px"><thead><tr>' +
+    '<th>순위</th><th>이름</th><th>이번 라운드</th><th class="r">현금</th><th class="r">총자산</th><th class="r">수익률</th><th class="r">관리</th></tr></thead><tbody>' +
+    (rows || '<tr><td colspan="7" class="sub">아직 입장한 참가자가 없습니다.</td></tr>') + '</tbody></table></div>';
+}
+
+async function onPlayersClick(e) {
+  const ask = e.target.closest('[data-kick-ask]');
+  if (ask) { kickId = ask.dataset.kickAsk; renderPlayers(); return; }
+  if (e.target.closest('[data-kick-cancel]')) { kickId = ''; renderPlayers(); return; }
+  const go = e.target.closest('[data-kick]');
+  if (!go) return;
+  const id = go.dataset.kick;
+  kickId = '';
+  flash('');
+  try {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'players', id));
+    await batch.commit();
+  } catch (err) {
+    flash(explain(err));
+    renderPlayers();
+  }
 }
 
 async function resetGame() {
