@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>모의투자 관리자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="admin">
+  <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px">
+    <div>
+      <span class="accent" style="font-size:13px;font-weight:600;letter-spacing:.08em">경제인의 밤 · 운영</span>
+      <h1>모의투자 관리자</h1>
+    </div>
+    <div id="who" class="sub" style="font-size:14px"></div>
+  </div>
+  <div class="flash" id="flash" role="alert"></div>
+
+  <form class="card" id="login" style="max-width:420px;display:none;flex-direction:column;gap:14px">
+    <h2>관리자 로그인</h2>
+    <div><label for="em" class="sub" style="font-size:13px">이메일</label><input class="field" id="em" type="email" autocomplete="username"></div>
+    <div><label for="pw" class="sub" style="font-size:13px">비밀번호</label><input class="field" id="pw" type="password" autocomplete="current-password"></div>
+    <button class="btn" type="submit">로그인</button>
+  </form>
+
+  <div id="panel" style="display:none;flex-direction:column;gap:20px">
+    <div class="flex">
+      <div class="card" id="control" style="flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:20px"></div>
+      <div class="card" id="subs" style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:14px"></div>
+    </div>
+    <div class="card" id="scenario" style="display:flex;flex-direction:column;gap:16px"></div>
+    <div class="card" id="players" style="display:flex;flex-direction:column;gap:12px"></div>
+    <div class="card" id="danger" style="display:flex;flex-direction:column;gap:12px">
+      <h2>게임 관리</h2>
+      <p class="sub" style="font-size:14px;line-height:1.6">초기화하면 모든 참가자와 진행 기록이 지워지고 대기 상태로 돌아갑니다. 리허설이 끝난 뒤 본 행사 전에 사용하세요.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <label for="resetWord" class="sub" style="font-size:14px">확인을 위해 "초기화"를 입력</label>
+        <input class="field" id="resetWord" style="width:160px" autocomplete="off">
+        <button class="btn ghost" type="button" id="resetBtn">게임 초기화</button>
+        <button class="btn ghost" type="button" id="csvBtn">결과 CSV 내려받기</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module" src="js/admin.js"></script>
+</body>
+</html>
