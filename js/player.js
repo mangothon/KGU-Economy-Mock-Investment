@@ -20,6 +20,7 @@ let viewKey = '';
 let joinError = '';
 let tradeError = '';
 let sending = false;
+let limit = { code: '', text: '' };  // 현금 한도 초과 안내
 
 if (!configured) {
   app.innerHTML = '<div class="center"><h2>설정이 필요해요</h2><p>js/config.js에 Firebase 설정값을 넣어 주세요.</p></div>';
@@ -35,6 +36,9 @@ if (!configured) {
   app.addEventListener('input', onInput);
   app.addEventListener('submit', onSubmit);
 }
+
+// 모바일 확대·축소 막기 (iOS 사파리는 viewport 설정을 무시하므로 제스처를 직접 막음)
+['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => document.addEventListener(t, (e) => e.preventDefault()));
 
 function fatal(e) {
   console.error(e);
@@ -87,7 +91,7 @@ function assetCard() {
   const total = myTotal();
   const cum = cumPct();
   const stock = total - me.cash;
-  const rank = me.rank ? '현재 순위 <b style="color:var(--text)">' + me.rank + '위</b>' : '';
+  const rank = me.rank ? '현재 순위 <b style="color:var(--text)">???</b>' : '';  // 최종 결과 전까지 순위 비공개
   return '<div class="card" style="display:flex;flex-direction:column;gap:12px">' +
     '<div style="display:flex;justify-content:space-between" class="sub"><span style="font-size:13px">내 총자산</span><span style="font-size:13px">' + rank + '</span></div>' +
     '<div style="display:flex;align-items:baseline;gap:10px"><span class="big">' + fmt(total) + '원</span>' +
@@ -184,6 +188,7 @@ function initDraft() {
   for (const c of COMPANIES) draft[c.code] = Math.max(0, (hold[c.code] || 0) + (o[c.code] || 0));
   draftRound = state.round;
   tradeError = '';
+  limit = { code: '', text: '' };
 }
 
 function calc() {
@@ -199,6 +204,24 @@ function calc() {
     if (d !== 0) qty[c.code] = d;
   }
   return { buy: buy, sell: sell, qty: qty, cashAfter: me.cash - buy + sell };
+}
+
+// 다른 종목 주문은 그대로 두고, 이 종목을 최대 몇 주까지 보유할 수 있는지 (현금 한도)
+function maxQty(code) {
+  const hold = (me.holdings || {})[code] || 0;
+  const keep = draft[code];
+  draft[code] = hold;
+  const cash = calc().cashAfter;
+  draft[code] = keep;
+  return hold + Math.max(0, Math.floor(cash / prices()[code]));
+}
+
+function setLimit(code) {
+  const c = COMPANIES.find((x) => x.code === code);
+  const n = maxQty(code) - ((me.holdings || {})[code] || 0);
+  limit = { code: code, text: n > 0
+    ? '현금이 부족해요. ' + c.name + '은(는) 최대 ' + n + '주까지만 매수할 수 있어요.'
+    : '현금이 부족해 ' + c.name + '을(를) 더 매수할 수 없어요.' };
 }
 
 function sameQty(a, b) {
@@ -218,12 +241,14 @@ function renderTrade() {
     rows += '<div class="ind">' + esc(ind) + '</div>';
     for (const c of COMPANIES.filter((x) => x.ind === ind)) {
       const chg = pp ? (p[c.code] / pp[c.code] - 1) * 100 : null;
+      const chgText = chg === null ? '' : (state.round - 1) + 'R 대비 : ' + (chg > 0 ? '+' : chg < 0 ? '-' : '') + Number(Math.abs(chg).toFixed(1)) + '%';
       rows += '<div class="row"><div class="nm"><b>' + esc(c.name) + '</b><span id="h-' + c.code + '"></span></div>' +
         '<div class="pr"><b>' + fmt(p[c.code]) + '</b>' +
-        (chg === null ? '<span class="sub">시작가</span>' : '<span class="' + cls(chg) + '">' + pctText(chg) + '</span>') + '</div>' +
+        (chg === null ? '<span class="sub">시작가</span>' : '<span class="' + (chg === 0 ? 'sub' : cls(chg)) + '">' + chgText + '</span>') + '</div>' +
         '<div class="step"><button type="button" class="down" data-act="dec" data-code="' + c.code + '" aria-label="' + esc(c.name) + ' 1주 줄이기">−</button>' +
         '<input type="number" inputmode="numeric" min="0" step="1" data-code="' + c.code + '" id="t-' + c.code + '" aria-label="' + esc(c.name) + ' 목표 보유 수량">' +
-        '<button type="button" class="up" data-act="inc" data-code="' + c.code + '" aria-label="' + esc(c.name) + ' 1주 늘리기">+</button></div></div>';
+        '<button type="button" class="up" data-act="inc" data-code="' + c.code + '" aria-label="' + esc(c.name) + ' 1주 늘리기">+</button></div>' +
+        '<div class="lim" id="w-' + c.code + '" role="alert"></div></div>';
     }
   }
   setView(key,
@@ -257,7 +282,8 @@ function patchTrade() {
     if (document.activeElement !== input) input.value = draft[c.code];
     const row = input.parentElement;
     row.querySelector('[data-act="dec"]').disabled = draft[c.code] <= 0;
-    row.querySelector('[data-act="inc"]').disabled = r.cashAfter < p[c.code];
+    row.querySelector('[data-act="inc"]').classList.toggle('max', r.cashAfter < p[c.code]);
+    document.getElementById('w-' + c.code).textContent = limit.code === c.code ? limit.text : '';
   }
   const ca = document.getElementById('cashAfter');
   ca.textContent = fmt(r.cashAfter) + '원';
@@ -326,7 +352,6 @@ function renderResult() {
   const base = settled && me.prevTotal ? me.prevTotal : total;
   const roundPct = (total / base - 1) * 100;
   const cum = cumPct();
-  const move = settled && me.prevRank ? me.prevRank - me.rank : 0;
   const hold = me.holdings || {};
 
   let surprises = '';
@@ -351,7 +376,7 @@ function renderResult() {
     '<span class="sub" style="font-size:14px">이번 라운드 <b class="' + cls(roundPct) + '">' + pctText(roundPct, 2) + ' (' + (total - base >= 0 ? '+' : '−') + fmt(Math.abs(total - base)) + ')</b></span>' +
     '<span class="sub" style="font-size:14px">누적 수익률 <b class="' + cls(cum) + '">' + pctText(cum, 2) + '</b></span></div>' +
     '<div class="grid2"><div class="mini" style="background:var(--card);border:1px solid var(--line)"><span>현재 순위</span><b style="font-size:20px">' +
-    (settled ? me.rank + '위' : '–') + (move ? ' <span class="' + (move > 0 ? 'up' : 'down') + '" style="font-size:13px">' + (move > 0 ? '▲' : '▼') + Math.abs(move) + '</span>' : '') +
+    (settled ? '???' : '–') +   // 최종 결과 전까지 순위 비공개
     '</b><span>' + (state.playerCount || 0) + '명 중</span></div>' +
     '<div class="mini" style="background:var(--card);border:1px solid var(--line)"><span>현금</span><b style="font-size:20px">' + fmt(me.cash) + '원</b><span>다음 라운드 투자 가능</span></div></div>' +
     surprises +
@@ -386,8 +411,10 @@ function onClick(e) {
   if (act === 'leave') return leave();
   if (act === 'submit') return submitOrder();
   const code = t.dataset.code;
+  limit = { code: '', text: '' };
   if (act === 'inc') {
     if (calc().cashAfter >= prices()[code]) draft[code] += 1;
+    else setLimit(code);
   } else if (act === 'dec') {
     if (draft[code] > 0) draft[code] -= 1;
   }
@@ -399,7 +426,16 @@ function onInput(e) {
   const code = e.target.dataset && e.target.dataset.code;
   if (!code || !(code in draft)) return;
   const n = parseInt(e.target.value, 10);
-  draft[code] = Number.isFinite(n) && n > 0 ? Math.min(n, 100000) : 0;
+  const want = Number.isFinite(n) && n > 0 ? Math.min(n, 100000) : 0;
+  const max = maxQty(code);
+  limit = { code: '', text: '' };
+  if (want > max) {
+    draft[code] = max;
+    e.target.value = max;   // 한도를 넘는 숫자는 입력되지 않게 되돌림
+    setLimit(code);
+  } else {
+    draft[code] = want;
+  }
   tradeError = '';
   patchTrade();
 }

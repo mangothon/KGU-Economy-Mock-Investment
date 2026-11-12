@@ -52,11 +52,11 @@ h1,h2,h3,p{margin:0}
 .timer{font-size:22px;font-weight:700;color:var(--accent)}
 .list{flex:1;padding:4px 16px 16px}
 .ind{padding:16px 0 6px;font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--sub)}
-.row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line2)}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line2)}
 .row .nm{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .row .nm b{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .nm span{font-size:12px;color:var(--sub)}
-.row .pr{width:74px;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.row .pr{min-width:74px;white-space:nowrap;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 .row .pr b{font-size:15px;font-weight:600} .row .pr span{font-size:12px;font-weight:600}
 .step{display:flex;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px}
 .step button{width:44px;height:44px;border:0;background:transparent;font-size:22px}
@@ -130,3 +130,9 @@ html.board{font-size:calc(100vw / 120)}
 .rk .t{width:12rem;text-align:right;font-size:1.35rem;color:var(--mid)}
 .rk .r{width:9rem;text-align:right;font-size:1.75rem;font-weight:700}
 .empty{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--sub);font-size:1.5rem;line-height:1.6}
+
+/* 모바일 더블탭 확대 방지 · 현금 한도 안내 */
+html,button,input,a{touch-action:manipulation}
+.row .lim{flex-basis:100%;color:#FF8A8A;font-size:13px;font-weight:600;text-align:right}
+.row .lim:empty{display:none}
+.step button.max{opacity:.3}
