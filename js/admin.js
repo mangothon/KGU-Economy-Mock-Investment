@@ -64,21 +64,7 @@ if (!configured) {
       flash('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.');
     }
   });
-  $('googleBtn').addEventListener('click', async () => {
-    flash('');
-    try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-    } catch (err) {
-      console.error(err);
-      if (err && err.code === 'auth/unauthorized-domain') {
-        flash('Firebase 콘솔 Authentication > 설정 > 승인된 도메인에 이 사이트 주소(아이디.github.io)를 추가해 주세요.');
-      } else if (err && err.code === 'auth/popup-blocked') {
-        flash('브라우저가 로그인 팝업을 막았습니다. 주소창의 팝업 차단을 해제하고 다시 눌러 주세요.');
-      } else if (!err || err.code !== 'auth/popup-closed-by-user') {
-        flash('Google 로그인에 실패했습니다. 다시 시도해 주세요.');
-      }
-    }
-  });
+  
   $('resetBtn').addEventListener('click', resetGame);
   $('csvBtn').addEventListener('click', downloadCsv);
   $('players').addEventListener('click', onPlayersClick);
